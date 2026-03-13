@@ -1,0 +1,1808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoPR — Autonomous Pull Request System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Syne:wght@400;600;700;800&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #080b10;
+  --surface: #0e131b;
+  --surface2: #141c27;
+  --border: #1e2d3d;
+  --border-bright: #2a3f54;
+  --text: #c8d8e8;
+  --text-muted: #6b8099;
+  --text-dim: #3d5066;
+  --accent: #00d4ff;
+  --accent2: #7c5cfc;
+  --accent3: #00ff9d;
+  --warn: #ffb800;
+  --danger: #ff4757;
+  --success: #00ff9d;
+  --pr-gold: #ffd700;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Background grid ── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,212,255,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,212,255,0.025) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Layout ── */
+.app { position: relative; z-index: 1; max-width: 1280px; margin: 0 auto; padding: 0 24px 80px; }
+
+/* ── Header ── */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28px 0 32px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 40px;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.logo-icon {
+  width: 44px; height: 44px;
+  background: linear-gradient(135deg, var(--accent2), var(--accent));
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+  box-shadow: 0 0 30px rgba(0,212,255,0.3);
+}
+
+.logo h1 {
+  font-family: 'Syne', sans-serif;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  background: linear-gradient(90deg, #fff, var(--accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.logo-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+.header-badge {
+  display: flex; gap: 8px; align-items: center;
+}
+
+.badge {
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.badge-ai { background: rgba(124,92,252,0.15); color: var(--accent2); border: 1px solid rgba(124,92,252,0.3); }
+.badge-live { background: rgba(0,255,157,0.1); color: var(--accent3); border: 1px solid rgba(0,255,157,0.25); animation: pulse-border 2s infinite; }
+
+@keyframes pulse-border {
+  0%,100% { border-color: rgba(0,255,157,0.25); }
+  50% { border-color: rgba(0,255,157,0.6); }
+}
+
+/* ── Pipeline flow visualization ── */
+.pipeline-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin-bottom: 40px;
+  position: relative;
+}
+
+.stage-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  z-index: 1;
+}
+
+.stage-dot {
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  border: 2px solid var(--border-bright);
+  background: var(--surface);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  transition: all 0.4s ease;
+  position: relative;
+}
+
+.stage-dot::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  transition: all 0.4s ease;
+}
+
+.stage-dot.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 20px rgba(0,212,255,0.4);
+  animation: spin-glow 1s infinite;
+}
+
+.stage-dot.done {
+  border-color: var(--accent3);
+  background: rgba(0,255,157,0.08);
+  box-shadow: 0 0 15px rgba(0,255,157,0.3);
+}
+
+.stage-dot.done::after { border-color: rgba(0,255,157,0.3); }
+
+@keyframes spin-glow {
+  0%,100% { box-shadow: 0 0 20px rgba(0,212,255,0.4); }
+  50% { box-shadow: 0 0 35px rgba(0,212,255,0.7); }
+}
+
+.stage-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 500;
+  text-align: center;
+  max-width: 80px;
+}
+
+.stage-label.active { color: var(--accent); }
+.stage-label.done { color: var(--accent3); }
+
+.stage-connector {
+  width: 80px; height: 2px;
+  background: var(--border);
+  position: relative;
+  margin-top: -30px;
+  flex-shrink: 0;
+}
+
+.stage-connector-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent3), var(--accent));
+  width: 0%;
+  transition: width 1s ease;
+}
+
+/* ── Issue Input Panel ── */
+.input-section { margin-bottom: 32px; }
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.panel-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.panel-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-title .icon { font-size: 14px; }
+
+.panel-body { padding: 20px; }
+
+.form-group { margin-bottom: 16px; }
+
+label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+input[type="text"], textarea, input[type="password"] {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  padding: 12px 14px;
+  outline: none;
+  resize: vertical;
+  transition: border-color 0.2s;
+}
+
+input[type="text"]:focus, textarea:focus, input[type="password"]:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(0,212,255,0.2);
+}
+
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+/* ── Buttons ── */
+.btn {
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-family: 'Syne', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent2), var(--accent));
+  color: #fff;
+  box-shadow: 0 4px 24px rgba(0,212,255,0.25);
+}
+
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 30px rgba(0,212,255,0.4); }
+.btn-primary:active { transform: translateY(0); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.btn-secondary {
+  background: var(--surface2);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover { border-color: var(--border-bright); color: var(--text); }
+
+.btn-small { padding: 6px 14px; font-size: 11px; }
+
+.actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+/* ── API Key section ── */
+.api-section {
+  background: rgba(124,92,252,0.05);
+  border: 1px solid rgba(124,92,252,0.2);
+  border-radius: 8px;
+  padding: 14px;
+  margin-top: 16px;
+}
+
+.api-section label { color: var(--accent2); }
+
+.api-note {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 6px;
+  line-height: 1.6;
+}
+
+/* ── Progress bar ── */
+.progress-bar-wrap {
+  display: none;
+  margin: 16px 0 0;
+}
+
+.progress-bar-wrap.visible { display: block; }
+
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.progress-track {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent2), var(--accent), var(--accent3));
+  border-radius: 2px;
+  transition: width 0.8s ease;
+  width: 0%;
+}
+
+/* ── Results ── */
+.results { display: none; }
+.results.visible { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+/* ── Stage Cards ── */
+.stage-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.5s ease;
+}
+
+.stage-card.visible { opacity: 1; transform: translateY(0); }
+.stage-card.full-width { grid-column: 1 / -1; }
+
+.stage-card-header {
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+
+.stage-num {
+  font-size: 10px;
+  font-family: 'DM Mono', monospace;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+
+.stage-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stage-card-body { padding: 18px; }
+
+/* ── Tags ── */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.tag-bug { background: rgba(255,71,87,0.1); color: var(--danger); border: 1px solid rgba(255,71,87,0.3); }
+.tag-feat { background: rgba(0,212,255,0.1); color: var(--accent); border: 1px solid rgba(0,212,255,0.3); }
+.tag-high { background: rgba(255,184,0,0.1); color: var(--warn); border: 1px solid rgba(255,184,0,0.3); }
+.tag-critical { background: rgba(255,71,87,0.15); color: var(--danger); border: 1px solid rgba(255,71,87,0.4); animation: pulse-border 1.5s infinite; }
+.tag-ok { background: rgba(0,255,157,0.1); color: var(--accent3); border: 1px solid rgba(0,255,157,0.3); }
+
+/* ── Metadata grid ── */
+.meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.meta-item { }
+
+.meta-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.meta-value {
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* ── File list ── */
+.file-list { display: flex; flex-direction: column; gap: 8px; }
+
+.file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--surface2);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.file-path {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.file-score {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: 'DM Mono', monospace;
+}
+
+.relevance-bar {
+  width: 60px;
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 8px;
+}
+
+.relevance-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent2), var(--accent));
+  border-radius: 2px;
+}
+
+/* ── Diff viewer ── */
+.diff-file {
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.diff-file-header {
+  padding: 10px 14px;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.diff-file-name { color: var(--accent); }
+
+.diff-stats {
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+}
+
+.diff-add { color: var(--accent3); }
+.diff-del { color: var(--danger); }
+
+.diff-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+
+.diff-tab {
+  padding: 8px 16px;
+  font-size: 11px;
+  cursor: pointer;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+  font-family: 'Syne', sans-serif;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.diff-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.diff-content {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.code-block {
+  padding: 14px;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #060a0f;
+}
+
+.line-add { color: var(--accent3); background: rgba(0,255,157,0.05); display: block; }
+.line-del { color: var(--danger); background: rgba(255,71,87,0.05); display: block; text-decoration: line-through; opacity: 0.7; }
+.line-context { color: var(--text-muted); display: block; }
+.line-hunk { color: var(--text-dim); display: block; margin: 4px 0; }
+
+/* ── PR Card ── */
+.pr-card {
+  background: linear-gradient(135deg, rgba(124,92,252,0.05), rgba(0,212,255,0.05));
+  border: 1px solid rgba(0,212,255,0.2);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.pr-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.pr-number {
+  font-family: 'DM Mono', monospace;
+  font-size: 20px;
+  color: var(--pr-gold);
+  font-weight: 300;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.pr-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.pr-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.pr-link {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.pr-link:hover { text-decoration: underline; }
+
+.pr-stats {
+  display: flex;
+  gap: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.pr-stat {
+  text-align: center;
+}
+
+.pr-stat-val {
+  font-family: 'Syne', sans-serif;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.pr-stat-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: 4px;
+}
+
+/* ── Review ── */
+.review-score {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 16px;
+  background: var(--surface2);
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+.score-circle {
+  width: 80px; height: 80px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 3px solid;
+}
+
+.score-num {
+  font-family: 'Syne', sans-serif;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.score-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
+
+.score-good { border-color: var(--accent3); color: var(--accent3); }
+.score-warn { border-color: var(--warn); color: var(--warn); }
+.score-bad { border-color: var(--danger); color: var(--danger); }
+
+.verdict-badge {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.verdict-approved { background: rgba(0,255,157,0.1); color: var(--accent3); border: 1px solid rgba(0,255,157,0.3); }
+.verdict-warn { background: rgba(255,184,0,0.1); color: var(--warn); border: 1px solid rgba(255,184,0,0.3); }
+.verdict-rejected { background: rgba(255,71,87,0.1); color: var(--danger); border: 1px solid rgba(255,71,87,0.3); }
+
+.review-categories { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+
+.review-cat {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface2);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.cat-icon { font-size: 16px; flex-shrink: 0; }
+
+.cat-name {
+  font-family: 'Syne', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex: 1;
+}
+
+.cat-score-bar {
+  width: 80px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.cat-score-fill { height: 100%; border-radius: 2px; }
+.fill-green { background: var(--accent3); }
+.fill-yellow { background: var(--warn); }
+.fill-red { background: var(--danger); }
+
+.cat-score-num {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 28px;
+  text-align: right;
+}
+
+.finding {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border-left: 3px solid;
+  margin-bottom: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.finding-warning { border-color: var(--warn); background: rgba(255,184,0,0.05); }
+.finding-info { border-color: var(--accent); background: rgba(0,212,255,0.04); }
+.finding-critical { border-color: var(--danger); background: rgba(255,71,87,0.08); }
+.finding-suggestion { border-color: var(--accent2); background: rgba(124,92,252,0.05); }
+
+.finding-file {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.finding-msg { color: var(--text); }
+
+.finding-suggestion-text {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  font-style: italic;
+}
+
+/* ── Inline comments ── */
+.inline-comment {
+  padding: 10px 14px;
+  background: rgba(124,92,252,0.07);
+  border: 1px solid rgba(124,92,252,0.2);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.comment-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.comment-file {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.comment-line {
+  font-size: 10px;
+  color: var(--text-dim);
+  background: var(--border);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: 'DM Mono', monospace;
+}
+
+.comment-type {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.type-praise { color: var(--accent3); }
+.type-suggestion { color: var(--warn); }
+.type-nitpick { color: var(--text-muted); }
+.type-blocker { color: var(--danger); }
+
+/* ── Log stream ── */
+.log-stream {
+  background: #040608;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  max-height: 160px;
+  overflow-y: auto;
+  display: none;
+}
+
+.log-stream.visible { display: block; }
+
+.log-line {
+  line-height: 1.8;
+  opacity: 0;
+  animation: fadeIn 0.3s ease forwards;
+}
+
+@keyframes fadeIn { to { opacity: 1; } }
+
+.log-time { color: var(--text-dim); margin-right: 8px; }
+.log-info { color: var(--accent); }
+.log-success { color: var(--accent3); }
+.log-warn { color: var(--warn); }
+.log-error { color: var(--danger); }
+
+/* ── Stats row ── */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  text-align: center;
+  opacity: 0;
+  transition: all 0.4s ease;
+}
+
+.stat-card.visible { opacity: 1; }
+
+.stat-num {
+  font-family: 'Syne', sans-serif;
+  font-size: 32px;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--accent2), var(--accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+
+.stat-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* ── Spinner ── */
+.spinner {
+  width: 14px; height: 14px;
+  border: 2px solid rgba(0,212,255,0.2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+
+/* ── Tabs for code ── */
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
+/* ── Keywords ── */
+.keywords { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.kw { padding: 3px 10px; background: rgba(0,212,255,0.08); border: 1px solid rgba(0,212,255,0.2); border-radius: 20px; font-size: 11px; color: var(--accent); font-family: 'DM Mono', monospace; }
+
+/* ── Empty state ── */
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-dim);
+}
+
+.empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+.empty-text { font-size: 13px; line-height: 1.8; }
+
+/* ── Section divider ── */
+.section-label {
+  font-family: 'Syne', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .results.visible { grid-template-columns: 1fr; }
+  .stage-card.full-width { grid-column: 1; }
+  .stats-row { grid-template-columns: 1fr 1fr; }
+  .form-row { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">⚡</div>
+      <div>
+        <h1>AutoPR</h1>
+        <div class="logo-sub">Autonomous Issue → Pull Request System</div>
+      </div>
+    </div>
+    <div class="header-badge">
+      <span class="badge badge-ai">🤖 Claude AI</span>
+      <span class="badge badge-live">● Live Demo</span>
+    </div>
+  </header>
+
+  <!-- PIPELINE FLOW -->
+  <div class="pipeline-header" id="pipelineViz">
+    <div class="stage-node">
+      <div class="stage-dot" id="dot-0">📝</div>
+      <div class="stage-label" id="lbl-0">Issue</div>
+    </div>
+    <div class="stage-connector"><div class="stage-connector-fill" id="conn-0"></div></div>
+    <div class="stage-node">
+      <div class="stage-dot" id="dot-1">🔍</div>
+      <div class="stage-label" id="lbl-1">Analyze</div>
+    </div>
+    <div class="stage-connector"><div class="stage-connector-fill" id="conn-1"></div></div>
+    <div class="stage-node">
+      <div class="stage-dot" id="dot-2">⚙️</div>
+      <div class="stage-label" id="lbl-2">Generate</div>
+    </div>
+    <div class="stage-connector"><div class="stage-connector-fill" id="conn-2"></div></div>
+    <div class="stage-node">
+      <div class="stage-dot" id="dot-3">🚀</div>
+      <div class="stage-label" id="lbl-3">Pull Request</div>
+    </div>
+    <div class="stage-connector"><div class="stage-connector-fill" id="conn-3"></div></div>
+    <div class="stage-node">
+      <div class="stage-dot" id="dot-4">✅</div>
+      <div class="stage-label" id="lbl-4">Review</div>
+    </div>
+  </div>
+
+  <!-- INPUT PANEL -->
+  <div class="input-section">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title"><span class="icon">📋</span> Issue Input</div>
+        <button class="btn btn-secondary btn-small" onclick="loadDemo()">Load Demo Issue</button>
+      </div>
+      <div class="panel-body">
+        <div class="form-group">
+          <label>Issue Title</label>
+          <input type="text" id="issueTitle" placeholder="e.g. Fix login bug when password field is empty" />
+        </div>
+        <div class="form-group">
+          <label>Issue Description</label>
+          <textarea id="issueBody" rows="6" placeholder="Describe the bug, steps to reproduce, expected vs actual behavior..."></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Repository Owner</label>
+            <input type="text" id="repoOwner" value="acme-corp" />
+          </div>
+          <div class="form-group">
+            <label>Repository Name</label>
+            <input type="text" id="repoName" value="web-platform" />
+          </div>
+        </div>
+
+        <div class="api-section">
+          <label>🔑 Anthropic API Key (optional — enables real AI)</label>
+          <input type="password" id="apiKey" placeholder="sk-ant-... (leave blank for demo mode)" />
+          <div class="api-note">Without a key, AutoPR runs in demo mode with realistic pre-built responses. With a key, it uses Claude to interpret, generate, and review code in real time.</div>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn-primary" id="runBtn" onclick="runPipeline()">
+            <span id="runBtnIcon">⚡</span> Run AutoPR Pipeline
+          </button>
+          <button class="btn btn-secondary" onclick="resetAll()">↺ Reset</button>
+          <span id="statusMsg" style="font-size:12px; color: var(--text-muted);"></span>
+        </div>
+
+        <div class="progress-bar-wrap" id="progressWrap">
+          <div class="progress-label">
+            <span id="progressMsg">Starting pipeline...</span>
+            <span id="progressPct">0%</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOG STREAM -->
+  <div class="log-stream" id="logStream"></div>
+
+  <!-- STATS ROW -->
+  <div class="stats-row" id="statsRow" style="display:none; margin-top: 24px;">
+    <div class="stat-card" id="stat-0">
+      <div class="stat-num" id="statFiles">0</div>
+      <div class="stat-desc">Files Modified</div>
+    </div>
+    <div class="stat-card" id="stat-1">
+      <div class="stat-num" id="statAdded">0</div>
+      <div class="stat-desc">Lines Added</div>
+    </div>
+    <div class="stat-card" id="stat-2">
+      <div class="stat-num" id="statRemoved">0</div>
+      <div class="stat-desc">Lines Removed</div>
+    </div>
+    <div class="stat-card" id="stat-3">
+      <div class="stat-num" id="statScore">--</div>
+      <div class="stat-desc">Review Score</div>
+    </div>
+  </div>
+
+  <!-- RESULTS GRID -->
+  <div class="results" id="resultsGrid" style="margin-top: 24px;">
+
+    <!-- Stage 1: Interpretation -->
+    <div class="stage-card" id="card-interpret">
+      <div class="stage-card-header">
+        <span class="stage-num">STAGE 01</span>
+        <div class="stage-title">📝 Issue Interpretation</div>
+        <div id="interpStatus"></div>
+      </div>
+      <div class="stage-card-body" id="interpBody">
+        <div class="empty-state"><div class="empty-icon">📝</div><div class="empty-text">Waiting for pipeline...</div></div>
+      </div>
+    </div>
+
+    <!-- Stage 2: Analysis -->
+    <div class="stage-card" id="card-analyze">
+      <div class="stage-card-header">
+        <span class="stage-num">STAGE 02</span>
+        <div class="stage-title">🔍 Codebase Analysis</div>
+        <div id="analyzeStatus"></div>
+      </div>
+      <div class="stage-card-body" id="analyzeBody">
+        <div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-text">Waiting...</div></div>
+      </div>
+    </div>
+
+    <!-- Stage 3: Code Changes -->
+    <div class="stage-card full-width" id="card-generate">
+      <div class="stage-card-header">
+        <span class="stage-num">STAGE 03</span>
+        <div class="stage-title">⚙️ Code Change Generation</div>
+        <div id="generateStatus"></div>
+      </div>
+      <div class="stage-card-body" id="generateBody">
+        <div class="empty-state"><div class="empty-icon">⚙️</div><div class="empty-text">Waiting...</div></div>
+      </div>
+    </div>
+
+    <!-- Stage 4: PR -->
+    <div class="stage-card" id="card-pr">
+      <div class="stage-card-header">
+        <span class="stage-num">STAGE 04</span>
+        <div class="stage-title">🚀 Pull Request</div>
+        <div id="prStatus"></div>
+      </div>
+      <div class="stage-card-body" id="prBody">
+        <div class="empty-state"><div class="empty-icon">🚀</div><div class="empty-text">Waiting...</div></div>
+      </div>
+    </div>
+
+    <!-- Stage 5: Review -->
+    <div class="stage-card" id="card-review">
+      <div class="stage-card-header">
+        <span class="stage-num">STAGE 05</span>
+        <div class="stage-title">✅ Automated Review</div>
+        <div id="reviewStatus"></div>
+      </div>
+      <div class="stage-card-body" id="reviewBody">
+        <div class="empty-state"><div class="empty-icon">✅</div><div class="empty-text">Waiting...</div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:8000';
+let running = false;
+
+// ── Demo data ──
+const DEMO = {
+  issue_title: "Fix login bug when password field is empty",
+  issue_body: `## Bug Report
+
+**Description:**
+When a user submits the login form with an empty password field, the application crashes with an unhandled exception instead of showing a validation error.
+
+**Steps to Reproduce:**
+1. Navigate to /login
+2. Enter a valid username
+3. Leave password field empty
+4. Click "Submit"
+
+**Expected Behavior:**
+A user-friendly error message: "Password cannot be empty"
+
+**Actual Behavior:**
+Application throws a 500 Internal Server Error. The traceback shows:
+\`\`\`
+AttributeError: 'NoneType' object has no attribute 'encode'
+  File "auth/login.py", line 47, in validate_password
+    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+\`\`\`
+
+**Environment:**
+- Python 3.11
+- Flask 3.0
+- bcrypt 4.1
+
+**Additional Context:**
+This affects all login flows. Priority: HIGH`,
+  repo_owner: "acme-corp",
+  repo_name: "web-platform"
+};
+
+function loadDemo() {
+  document.getElementById('issueTitle').value = DEMO.issue_title;
+  document.getElementById('issueBody').value = DEMO.issue_body;
+  document.getElementById('repoOwner').value = DEMO.repo_owner;
+  document.getElementById('repoName').value = DEMO.repo_name;
+  log('info', 'Demo issue loaded — click Run AutoPR Pipeline to start');
+}
+
+// ── Logging ──
+function log(type, msg) {
+  const stream = document.getElementById('logStream');
+  stream.classList.add('visible');
+  const now = new Date().toLocaleTimeString('en-US', { hour12: false });
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML = `<span class="log-time">[${now}]</span><span class="log-${type}">${msg}</span>`;
+  stream.appendChild(line);
+  stream.scrollTop = stream.scrollHeight;
+}
+
+// ── Progress ──
+function setProgress(pct, msg) {
+  document.getElementById('progressWrap').classList.add('visible');
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressPct').textContent = pct + '%';
+  document.getElementById('progressMsg').textContent = msg;
+}
+
+// ── Stage dots ──
+function activateDot(i) {
+  const dot = document.getElementById(`dot-${i}`);
+  const lbl = document.getElementById(`lbl-${i}`);
+  dot.classList.add('active');
+  lbl.classList.add('active');
+}
+
+function completeDot(i) {
+  const dot = document.getElementById(`dot-${i}`);
+  const lbl = document.getElementById(`lbl-${i}`);
+  dot.classList.remove('active');
+  dot.classList.add('done');
+  lbl.classList.remove('active');
+  lbl.classList.add('done');
+  if (i < 4) document.getElementById(`conn-${i}`).style.width = '100%';
+}
+
+// ── Show a card ──
+function showCard(id) {
+  const card = document.getElementById(id);
+  document.getElementById('resultsGrid').classList.add('visible');
+  setTimeout(() => card.classList.add('visible'), 50);
+}
+
+// ── Run pipeline ──
+async function runPipeline() {
+  if (running) return;
+  running = true;
+
+  const title = document.getElementById('issueTitle').value.trim();
+  const body = document.getElementById('issueBody').value.trim();
+  if (!title || !body) {
+    alert('Please enter an issue title and description (or load the demo).');
+    running = false;
+    return;
+  }
+
+  resetResults();
+  document.getElementById('runBtn').disabled = true;
+  document.getElementById('runBtnIcon').innerHTML = '<span class="spinner"></span>';
+  document.getElementById('resultsGrid').classList.add('visible');
+
+  const payload = {
+    issue_title: title,
+    issue_body: body,
+    repo_owner: document.getElementById('repoOwner').value || 'demo-org',
+    repo_name: document.getElementById('repoName').value || 'demo-repo',
+    anthropic_api_key: document.getElementById('apiKey').value || null,
+    use_real_github: false
+  };
+
+  log('info', `Pipeline started for: "${title}"`);
+  log('info', `Target repo: ${payload.repo_owner}/${payload.repo_name}`);
+
+  // Try streaming from backend; fall back to client-side simulation
+  try {
+    const resp = await fetch(`${API}/api/stream-pipeline`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!resp.ok) throw new Error('Backend error');
+    await consumeStream(resp);
+  } catch (e) {
+    log('warn', `Backend not reachable — running client-side simulation`);
+    await runSimulation(payload);
+  }
+
+  running = false;
+  document.getElementById('runBtn').disabled = false;
+  document.getElementById('runBtnIcon').textContent = '⚡';
+}
+
+async function consumeStream(resp) {
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        const data = line.slice(6).trim();
+        if (data === '[DONE]') return;
+        try {
+          handleEvent(JSON.parse(data));
+        } catch {}
+      }
+    }
+  }
+}
+
+function handleEvent(ev) {
+  const stage = ev.stage;
+  if (stage === 'interpreted' && ev.data) renderInterpretation(ev.data);
+  if (stage === 'analyzed' && ev.data) renderAnalysis(ev.data);
+  if (stage === 'generated' && ev.data) renderCodeChanges(ev.data);
+  if (stage === 'pr_created' && ev.data) renderPR(ev.data);
+  if (stage === 'reviewed' && ev.data) renderReview(ev.data);
+  if (ev.progress) setProgress(ev.progress, ev.message || '');
+  if (ev.message) log(stage === 'reviewed' ? 'success' : 'info', ev.message);
+  if (stage === 'complete' && ev.summary) {
+    updateStats(ev.summary);
+    log('success', '🎉 AutoPR pipeline completed successfully!');
+  }
+}
+
+// ── Client-side simulation ──
+async function runSimulation(payload) {
+  // Generate a realistic simulated result using embedded demo data
+  const sim = buildSimulatedResult(payload);
+
+  // Stage 1
+  activateDot(0);
+  setProgress(10, 'Analyzing issue with AI...');
+  log('info', 'Stage 1: Interpreting issue...');
+  await sleep(800);
+  renderInterpretation(sim.stages.interpretation);
+  completeDot(0); activateDot(1);
+  log('success', `Task classified: ${sim.stages.interpretation.task_type}`);
+
+  // Stage 2
+  setProgress(30, 'Scanning repository codebase...');
+  log('info', 'Stage 2: Analyzing codebase...');
+  await sleep(1000);
+  renderAnalysis(sim.stages.analysis);
+  completeDot(1); activateDot(2);
+  log('success', `Found ${sim.stages.analysis.relevant_files.length} relevant files`);
+
+  // Stage 3
+  setProgress(55, 'Generating code fixes with AI...');
+  log('info', 'Stage 3: Generating code changes...');
+  await sleep(1200);
+  renderCodeChanges(sim.stages.code_changes);
+  completeDot(2); activateDot(3);
+  log('success', `Code changes generated for ${sim.stages.code_changes.modified_files.length} files`);
+
+  // Stage 4
+  setProgress(80, 'Creating pull request...');
+  log('info', 'Stage 4: Creating pull request...');
+  await sleep(700);
+  renderPR(sim.stages.pull_request);
+  completeDot(3); activateDot(4);
+  log('success', `PR #${sim.stages.pull_request.number} created`);
+
+  // Stage 5
+  setProgress(92, 'Running automated code review...');
+  log('info', 'Stage 5: Running code review...');
+  await sleep(1000);
+  renderReview(sim.stages.review);
+  completeDot(4);
+  setProgress(100, 'Pipeline complete ✓');
+  log('success', `Review: ${sim.stages.review.verdict} (score: ${sim.stages.review.score}/100)`);
+  updateStats(sim);
+  log('success', '🎉 AutoPR pipeline completed!');
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Render Functions ──
+
+function renderInterpretation(data) {
+  showCard('card-interpret');
+  const typeClass = data.task_type === 'bug_fix' ? 'tag-bug' : 'tag-feat';
+  const priorClass = data.priority === 'critical' ? 'tag-critical' : data.priority === 'high' ? 'tag-high' : 'tag-ok';
+  const kws = (data.keywords || []).map(k => `<span class="kw">${k}</span>`).join('');
+  const criteria = (data.acceptance_criteria || []).map(c => `<li style="margin-bottom:4px; color:var(--text-muted)">${c}</li>`).join('');
+
+  document.getElementById('interpBody').innerHTML = `
+    <div class="meta-grid">
+      <div class="meta-item">
+        <div class="meta-label">Task Type</div>
+        <div><span class="tag ${typeClass}">${(data.task_type||'').replace('_',' ')}</span></div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Priority</div>
+        <div><span class="tag ${priorClass}">${data.priority||'medium'}</span></div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Complexity</div>
+        <div class="meta-value">${data.complexity||'moderate'}</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Interpreter</div>
+        <div class="meta-value" style="font-size:11px">${data.interpreter||'rule-based'}</div>
+      </div>
+    </div>
+    <div class="section-label">Summary</div>
+    <p style="color:var(--text-muted); line-height:1.7; margin-bottom:16px; font-size:13px">${data.summary||''}</p>
+    <div class="section-label">Root Cause</div>
+    <p style="color:var(--text-muted); font-family:'DM Mono',monospace; font-size:12px; line-height:1.7; margin-bottom:16px; background:var(--surface2); padding:10px 14px; border-radius:6px">${data.root_cause||''}</p>
+    <div class="section-label">Keywords</div>
+    <div class="keywords">${kws}</div>
+    ${criteria ? `<div class="section-label" style="margin-top:16px">Acceptance Criteria</div><ul style="padding-left:16px; font-size:12px">${criteria}</ul>` : ''}
+  `;
+  document.getElementById('interpStatus').innerHTML = `<span class="tag tag-ok">✓ Done</span>`;
+}
+
+function renderAnalysis(data) {
+  showCard('card-analyze');
+  const files = (data.relevant_files || []).map(f => {
+    const details = (data.file_details || {})[f] || {};
+    const score = details.relevance_score || 0;
+    return `
+      <div class="file-item">
+        <div>
+          <div class="file-path">${f}</div>
+          <div style="font-size:11px; color:var(--text-dim); margin-top:2px">${details.language||'python'} · ${(details.analysis||{}).lines||0} lines · ${((details.analysis||{}).functions||[]).length} fns</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px">
+          <div class="relevance-bar"><div class="relevance-fill" style="width:${score}%"></div></div>
+          <span class="file-score">${score}%</span>
+        </div>
+      </div>`;
+  }).join('');
+
+  const issuesList = Object.values(data.file_details||{}).flatMap(f => f.issues_found||[])
+    .slice(0,4).map(iss => `<div class="finding finding-warning"><div class="finding-msg">Line ${iss.line}: ${iss.text}</div></div>`).join('');
+
+  document.getElementById('analyzeBody').innerHTML = `
+    <div class="meta-grid" style="margin-bottom:16px">
+      <div class="meta-item">
+        <div class="meta-label">Files Scanned</div>
+        <div class="meta-value">${data.total_files_scanned||0}</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Relevant Files</div>
+        <div class="meta-value">${(data.relevant_files||[]).length}</div>
+      </div>
+    </div>
+    <div class="section-label">Relevant Files by Score</div>
+    <div class="file-list" style="margin-bottom:16px">${files}</div>
+    ${issuesList ? `<div class="section-label">Issues Detected</div>${issuesList}` : ''}
+    <div style="font-size:11px; color:var(--text-dim); margin-top:12px">Method: ${data.analysis_method||'keyword matching'}</div>
+  `;
+  document.getElementById('analyzeStatus').innerHTML = `<span class="tag tag-ok">✓ Done</span>`;
+}
+
+function renderCodeChanges(data) {
+  showCard('card-generate');
+  const files = (data.modified_files || []);
+
+  if (!files.length) {
+    document.getElementById('generateBody').innerHTML = `<div class="empty-state"><div class="empty-icon">⚙️</div><div class="empty-text">No changes generated.</div></div>`;
+    return;
+  }
+
+  const fileTabs = files.map((f, i) =>
+    `<span class="diff-tab ${i===0?'active':''}" onclick="switchDiffTab(${i})" id="difftab-${i}">${f.path.split('/').pop()}</span>`
+  ).join('');
+
+  const filePanes = files.map((f, i) => {
+    const diffHtml = renderDiff(f.diff?.unified || '');
+    return `
+      <div class="tab-pane ${i===0?'active':''}" id="diffpane-${i}">
+        <div class="diff-file-header">
+          <span class="diff-file-name">${f.path}</span>
+          <div class="diff-stats">
+            <span class="diff-add">+${f.lines_added}</span>
+            <span class="diff-del">-${f.lines_removed}</span>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; border-bottom:1px solid var(--border)">
+          <div style="padding:6px 14px; border-right:1px solid var(--border); font-size:11px; color:var(--text-dim)">BEFORE</div>
+          <div style="padding:6px 14px; font-size:11px; color:var(--text-dim)">AFTER</div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr">
+          <div class="code-block" style="border-right:1px solid var(--border); color:var(--danger); opacity:0.8">${escHtml(f.before||'')}</div>
+          <div class="code-block" style="color:var(--accent3)">${escHtml(f.after||'')}</div>
+        </div>
+        ${f.explanation ? `<div style="padding:10px 14px; font-size:12px; color:var(--text-muted); border-top:1px solid var(--border)">💡 ${f.explanation}</div>` : ''}
+      </div>`;
+  }).join('');
+
+  document.getElementById('generateBody').innerHTML = `
+    <div class="meta-grid" style="margin-bottom:16px">
+      <div class="meta-item">
+        <div class="meta-label">Files Changed</div>
+        <div class="meta-value">${files.length}</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Method</div>
+        <div class="meta-value" style="font-size:11px">${data.generation_method||'demo'}</div>
+      </div>
+    </div>
+    <div class="section-label">Commit</div>
+    <div style="font-family:'DM Mono',monospace; font-size:12px; color:var(--accent); background:var(--surface2); padding:10px 14px; border-radius:6px; margin-bottom:16px">${data.commit_message||''}<br><span style="color:var(--text-dim)">branch: ${data.branch_name||''}</span></div>
+    <div class="section-label">Code Diffs</div>
+    <div class="diff-file">
+      <div class="diff-tabs">${fileTabs}</div>
+      ${filePanes}
+    </div>
+  `;
+  document.getElementById('generateStatus').innerHTML = `<span class="tag tag-ok">✓ ${files.length} files</span>`;
+}
+
+function switchDiffTab(i) {
+  document.querySelectorAll('.diff-tab').forEach((t,j) => t.classList.toggle('active', i===j));
+  document.querySelectorAll('.tab-pane').forEach((p,j) => p.classList.toggle('active', i===j));
+}
+
+function renderDiff(unified) {
+  return (unified||'').split('\n').map(line => {
+    if (line.startsWith('+++') || line.startsWith('---')) return `<span class="line-hunk">${escHtml(line)}</span>`;
+    if (line.startsWith('@@')) return `<span class="line-hunk">${escHtml(line)}</span>`;
+    if (line.startsWith('+')) return `<span class="line-add">${escHtml(line)}</span>`;
+    if (line.startsWith('-')) return `<span class="line-del">${escHtml(line)}</span>`;
+    return `<span class="line-context">${escHtml(line)}</span>`;
+  }).join('');
+}
+
+function renderPR(data) {
+  showCard('card-pr');
+  const labels = (data.labels||[]).map(l => `<span class="tag tag-feat">${l}</span>`).join('');
+  const files = (data.modified_files||[]).map(f => `<div class="file-path" style="font-size:12px; margin-bottom:4px">📄 ${f}</div>`).join('');
+
+  document.getElementById('prBody').innerHTML = `
+    <div class="pr-card">
+      <div class="pr-title-row">
+        <div class="pr-number">#${data.number}</div>
+        <div class="pr-title">${data.title||''}</div>
+      </div>
+      <div class="pr-meta">${labels}</div>
+      <a class="pr-link" href="${data.html_url||'#'}" target="_blank">🔗 ${data.html_url||data.url||'github.com/...'}</a>
+      <div class="pr-stats">
+        <div class="pr-stat">
+          <div class="pr-stat-val diff-add">+${(data.stats||{}).total_additions||0}</div>
+          <div class="pr-stat-label">additions</div>
+        </div>
+        <div class="pr-stat">
+          <div class="pr-stat-val diff-del">-${(data.stats||{}).total_deletions||0}</div>
+          <div class="pr-stat-label">deletions</div>
+        </div>
+        <div class="pr-stat">
+          <div class="pr-stat-val" style="color:var(--accent)">${(data.stats||{}).files_changed||0}</div>
+          <div class="pr-stat-label">files</div>
+        </div>
+      </div>
+    </div>
+    <div class="section-label">Commit</div>
+    <div style="font-family:'DM Mono',monospace; font-size:11px; color:var(--text-muted); background:var(--surface2); padding:10px 14px; border-radius:6px; margin-bottom:16px">
+      <span style="color:var(--accent2)">${((data.commit||{}).sha||'').substring(0,12)}</span>
+      <span style="margin-left:8px">${(data.commit||{}).message||''}</span><br>
+      <span style="color:var(--text-dim)">by ${(data.commit||{}).author||'autopr-bot'}</span>
+      <span style="color:var(--text-dim); margin-left:8px">branch: ${data.branch||''}</span>
+    </div>
+    <div class="section-label">Modified Files</div>
+    <div style="background:var(--surface2); padding:10px 14px; border-radius:6px">${files}</div>
+    ${data.simulated ? '<div style="margin-top:12px; font-size:11px; color:var(--text-dim)">⚡ Simulated PR — matches GitHub API schema</div>' : ''}
+  `;
+  document.getElementById('prStatus').innerHTML = `<span class="tag tag-ok">✓ Open</span>`;
+}
+
+function renderReview(data) {
+  showCard('card-review');
+  const score = data.score || 0;
+  const scoreClass = score >= 80 ? 'score-good' : score >= 60 ? 'score-warn' : 'score-bad';
+  const verdictClass = (data.verdict||'').includes('APPROVED') ? 'verdict-approved' : (data.verdict||'').includes('CHANGES') ? 'verdict-warn' : 'verdict-rejected';
+
+  const catIcons = { correctness: '🔬', security: '🔒', code_quality: '✨', test_coverage: '🧪', performance: '⚡' };
+  const cats = Object.entries(data.categories||{}).map(([name, cat]) => {
+    const catScore = cat.score || 0;
+    const fillClass = catScore >= 80 ? 'fill-green' : catScore >= 60 ? 'fill-yellow' : 'fill-red';
+    return `
+      <div class="review-cat">
+        <span class="cat-icon">${catIcons[name]||'📋'}</span>
+        <span class="cat-name">${name.replace('_',' ')}</span>
+        <div class="cat-score-bar"><div class="cat-score-fill ${fillClass}" style="width:${catScore}%"></div></div>
+        <span class="cat-score-num">${catScore}</span>
+        <span class="tag ${cat.rating==='PASS'?'tag-ok':cat.rating==='FAIL'?'tag-bug':'tag-high'}" style="font-size:9px">${cat.rating}</span>
+      </div>`;
+  }).join('');
+
+  // All findings
+  const allFindings = Object.values(data.categories||{}).flatMap(c => c.findings||[])
+    .filter(f => f.severity !== 'info').slice(0, 6);
+  const findingsHtml = allFindings.map(f => {
+    const cls = f.severity === 'warning' ? 'finding-warning' : f.severity === 'critical' ? 'finding-critical' : 'finding-suggestion';
+    return `
+      <div class="finding ${cls}">
+        <div class="finding-file">📄 ${f.file}</div>
+        <div class="finding-msg">${f.message}</div>
+        ${f.suggestion ? `<div class="finding-suggestion-text">💡 ${f.suggestion}</div>` : ''}
+      </div>`;
+  }).join('');
+
+  const inlineComments = (data.inline_comments||[]).slice(0,4).map(c => {
+    const typeClass = `type-${c.type}`;
+    return `
+      <div class="inline-comment">
+        <div class="comment-meta">
+          <span class="comment-file">${c.file}</span>
+          <span class="comment-line">L${c.line}</span>
+          <span class="comment-type ${typeClass}">${c.type}</span>
+        </div>
+        <div style="font-size:12px; color:var(--text-muted)">${c.body}</div>
+      </div>`;
+  }).join('');
+
+  const stats = data.summary_stats || {};
+
+  document.getElementById('reviewBody').innerHTML = `
+    <div class="review-score">
+      <div class="score-circle ${scoreClass}">
+        <div class="score-num">${score}</div>
+        <div class="score-label">Score</div>
+      </div>
+      <div>
+        <div style="margin-bottom:8px"><span class="verdict-badge ${verdictClass}">${(data.verdict||'').replace(/_/g,' ')}</span></div>
+        <p style="font-size:13px; color:var(--text-muted); line-height:1.6; margin-bottom:8px">${data.summary||''}</p>
+        <div style="font-size:11px; color:var(--text-dim)">
+          ${stats.critical||0} critical · ${stats.errors||0} errors · ${stats.warnings||0} warnings · ${stats.suggestions||0} suggestions
+        </div>
+      </div>
+    </div>
+    <div class="section-label">Category Scores</div>
+    <div class="review-categories">${cats}</div>
+    ${findingsHtml ? `<div class="section-label">Key Findings</div>${findingsHtml}` : ''}
+    ${inlineComments ? `<div class="section-label" style="margin-top:16px">Inline Comments</div>${inlineComments}` : ''}
+    <div style="margin-top:12px; padding:10px 14px; background:var(--surface2); border-radius:6px; font-size:12px;">
+      <span style="color:var(--text-muted)">Recommendation: </span>
+      <span style="color:var(--accent); font-family:'DM Mono',monospace">${(data.recommendation||'').replace(/_/g,' ')}</span>
+    </div>
+    <div style="margin-top:8px; font-size:11px; color:var(--text-dim)">— ${data.reviewer||'AutoPR Review Bot'}</div>
+  `;
+  document.getElementById('reviewStatus').innerHTML = `<span class="tag ${score>=80?'tag-ok':'tag-high'}">${data.verdict?.includes('APPROVED')?'✓ Approved':'⚠ Review'}</span>`;
+}
+
+function updateStats(sim) {
+  const changes = sim.stages?.code_changes || sim.code_changes || {};
+  const review = sim.stages?.review || sim.review || {};
+  const files = changes.modified_files || [];
+  const added = files.reduce((a,f) => a + (f.lines_added||0), 0);
+  const removed = files.reduce((a,f) => a + (f.lines_removed||0), 0);
+
+  document.getElementById('statFiles').textContent = files.length;
+  document.getElementById('statAdded').textContent = `+${added}`;
+  document.getElementById('statRemoved').textContent = `-${removed}`;
+  document.getElementById('statScore').textContent = review.score || '--';
+
+  const statsRow = document.getElementById('statsRow');
+  statsRow.style.display = 'grid';
+  setTimeout(() => {
+    document.querySelectorAll('.stat-card').forEach((c,i) => {
+      setTimeout(() => c.classList.add('visible'), i * 100);
+    });
+  }, 100);
+}
+
+function resetResults() {
+  ['card-interpret','card-analyze','card-generate','card-pr','card-review'].forEach(id => {
+    const card = document.getElementById(id);
+    card.classList.remove('visible');
+  });
+  document.getElementById('resultsGrid').classList.remove('visible');
+  document.getElementById('statsRow').style.display = 'none';
+  document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('visible'));
+  for (let i = 0; i < 5; i++) {
+    const dot = document.getElementById(`dot-${i}`);
+    const lbl = document.getElementById(`lbl-${i}`);
+    if (dot) { dot.classList.remove('active','done'); }
+    if (lbl) { lbl.classList.remove('active','done'); }
+    if (i < 4) {
+      const conn = document.getElementById(`conn-${i}`);
+      if (conn) conn.style.width = '0%';
+    }
+  }
+  document.getElementById('progressWrap').classList.remove('visible');
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('logStream').innerHTML = '';
+  document.getElementById('logStream').classList.remove('visible');
+
+  ['interpBody','analyzeBody','generateBody','prBody','reviewBody'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = `<div class="empty-state"><div class="empty-text">Waiting...</div></div>`;
+  });
+  ['interpStatus','analyzeStatus','generateStatus','prStatus','reviewStatus'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '';
+  });
+}
+
+function resetAll() {
+  resetResults();
+  document.getElementById('issueTitle').value = '';
+  document.getElementById('issueBody').value = '';
+}
+
+function escHtml(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Build full simulated result ──
+function buildSimulatedResult(payload) {
+  const isLogin = payload.issue_title.toLowerCase().includes('login') ||
+                  payload.issue_body.toLowerCase().includes('login');
+
+  return {
+    pipeline_id: Math.random().toString(36).slice(2,10),
+    stages: {
+      interpretation: {
+        task_type: "bug_fix",
+        summary: "Fix login handler crash when password field is empty or null",
+        affected_modules: ["auth", "login", "validators"],
+        keywords: ["login", "password", "validation", "auth", "exception"],
+        priority: "high",
+        complexity: "moderate",
+        file_hints: ["auth/login.py", "auth/validators.py"],
+        root_cause: "AttributeError: 'NoneType' object has no attribute 'encode' — password not validated before bcrypt.hashpw()",
+        acceptance_criteria: [
+          "Empty password returns 422 with clear error message",
+          "Null/missing password returns 422",
+          "No unhandled exceptions in login flow",
+          "Regression tests cover all edge cases"
+        ],
+        interpreter: "demo-simulation"
+      },
+      analysis: {
+        repo: `${payload.repo_owner}/${payload.repo_name}`,
+        total_files_scanned: 6,
+        relevant_files: ["auth/login.py", "auth/validators.py", "tests/test_auth.py"],
+        file_details: {
+          "auth/login.py": { relevance_score: 95, language: "python", analysis: { functions: ["login_handler","logout_handler"], lines: 32 }, issues_found: [{line:12, type:"bug_marker", text:"# BUG: No validation for empty password"},{line:18, type:"unguarded_encode", text:"hashed = bcrypt.hashpw(password.encode('utf-8'), user.salt)"}] },
+          "auth/validators.py": { relevance_score: 75, language: "python", analysis: { functions: ["validate_email","validate_username","validate_credentials"], lines: 24 }, issues_found: [{line:20, type:"bug_marker", text:"# BUG: Missing password validation!"}] },
+          "tests/test_auth.py": { relevance_score: 55, language: "python", analysis: { functions: ["test_login_valid_credentials","test_login_invalid_user"], lines: 20 }, issues_found: [{line:19, type:"bug_marker", text:"# BUG: Missing test for empty password!"}] }
+        },
+        primary_file: "auth/login.py",
+        analysis_method: "keyword_matching + ast_parsing",
+        context_summary: "Found 3 relevant files. Primary target: `auth/login.py`. Issue affects the bug_fix flow."
+      },
+      code_changes: {
+        modified_files: [
+          {
+            path: "auth/login.py",
+            before: `def login_handler():\n    data = request.get_json()\n    username = data.get("username")\n    password = data.get("password")\n\n    # BUG: No validation for empty password\n    user = User.query.filter_by(username=username).first()\n    if not user:\n        return jsonify({"error": "User not found"}), 404\n\n    hashed = bcrypt.hashpw(password.encode('utf-8'), user.salt)\n    if hashed != user.password_hash:\n        return jsonify({"error": "Invalid credentials"}), 401\n\n    session['user_id'] = user.id\n    return jsonify({"success": True, "token": user.generate_token()})`,
+            after: `def login_handler():\n    data = request.get_json()\n    if not data:\n        return jsonify({"error": "Request body must be JSON"}), 400\n\n    username = data.get("username")\n    password = data.get("password")\n\n    if not username or not isinstance(username, str):\n        return jsonify({"error": "Username is required"}), 422\n\n    if not password or not isinstance(password, str):\n        return jsonify({"error": "Password cannot be empty"}), 422\n\n    user = User.query.filter_by(username=username).first()\n    if not user:\n        return jsonify({"error": "Invalid credentials"}), 401\n\n    try:\n        hashed = bcrypt.hashpw(password.encode('utf-8'), user.salt)\n    except (ValueError, TypeError) as e:\n        logger.error(f"Hashing error: {e}")\n        return jsonify({"error": "Authentication error"}), 500\n\n    if hashed != user.password_hash:\n        return jsonify({"error": "Invalid credentials"}), 401\n\n    session['user_id'] = user.id\n    return jsonify({"success": True, "token": user.generate_token()})`,
+            explanation: "Added null/empty validation before password.encode() to prevent NoneType crash. Fixed user enumeration vulnerability.",
+            diff: { unified: "--- a/auth/login.py\n+++ b/auth/login.py\n@@ -1,16 +1,28 @@\n def login_handler():\n     data = request.get_json()\n-    username = data.get(\"username\")\n-    password = data.get(\"password\")\n-\n-    # BUG: No validation for empty password\n+    if not data:\n+        return jsonify({\"error\": \"Request body must be JSON\"}), 400\n+\n+    username = data.get(\"username\")\n+    password = data.get(\"password\")\n+\n+    if not password or not isinstance(password, str):\n+        return jsonify({\"error\": \"Password cannot be empty\"}), 422\n+\n     user = User.query.filter_by(username=username).first()\n     if not user:\n-        return jsonify({\"error\": \"User not found\"}), 404\n+        return jsonify({\"error\": \"Invalid credentials\"}), 401\n-    hashed = bcrypt.hashpw(password.encode('utf-8'), user.salt)\n+    try:\n+        hashed = bcrypt.hashpw(password.encode('utf-8'), user.salt)\n+    except (ValueError, TypeError) as e:\n+        return jsonify({\"error\": \"Authentication error\"}), 500", lines_added: 12, lines_removed: 4 },
+            lines_added: 12, lines_removed: 4
+          },
+          {
+            path: "auth/validators.py",
+            before: `def validate_credentials(username: str, password: str):\n    if not validate_username(username):\n        return False, "Invalid username format"\n    # BUG: Missing password validation!\n    return True, ""`,
+            after: `def validate_password(password: str) -> tuple[bool, str]:\n    if password is None:\n        return False, "Password is required"\n    if not isinstance(password, str):\n        return False, "Password must be a string"\n    if len(password.strip()) == 0:\n        return False, "Password cannot be empty"\n    if len(password) > 128:\n        return False, "Password exceeds maximum length"\n    return True, ""\n\n\ndef validate_credentials(username: str, password: str):\n    if not validate_username(username):\n        return False, "Invalid username format"\n    is_valid, error = validate_password(password)\n    if not is_valid:\n        return False, error\n    return True, ""`,
+            explanation: "Added validate_password() function and integrated into validate_credentials().",
+            diff: { unified: "", lines_added: 10, lines_removed: 2 },
+            lines_added: 10, lines_removed: 2
+          },
+          {
+            path: "tests/test_auth.py",
+            before: `def test_login_valid_credentials(client):\n    response = client.post('/auth/login', json={"username": "testuser", "password": "correct"})\n    assert response.status_code == 200\n\n# BUG: Missing test for empty password!`,
+            after: `def test_login_valid_credentials(client):\n    response = client.post('/auth/login', json={"username": "testuser", "password": "correct"})\n    assert response.status_code == 200\n\ndef test_login_empty_password(client):\n    response = client.post('/auth/login', json={"username": "testuser", "password": ""})\n    assert response.status_code == 422\n    assert "empty" in response.get_json()["error"].lower()\n\ndef test_login_null_password(client):\n    response = client.post('/auth/login', json={"username": "testuser"})\n    assert response.status_code == 422\n\ndef test_login_whitespace_password(client):\n    response = client.post('/auth/login', json={"username": "testuser", "password": "   "})\n    assert response.status_code == 422`,
+            explanation: "Added 4 regression tests covering empty, null, and whitespace password scenarios.",
+            diff: { unified: "", lines_added: 14, lines_removed: 1 },
+            lines_added: 14, lines_removed: 1
+          }
+        ],
+        total_files_changed: 3,
+        generation_method: "demo-simulation",
+        commit_message: "fix: add password validation to prevent NoneType crash in login handler",
+        branch_name: "autopr/fix/login-password-validation",
+        summary: "Fixed 3 files addressing the empty password crash in login flow"
+      },
+      pull_request: {
+        number: 247,
+        title: "fix: add password validation to prevent NoneType crash in login handler",
+        body: "Fixes #128 — adds input validation before bcrypt encoding.",
+        state: "open",
+        url: `https://github.com/${payload.repo_owner}/${payload.repo_name}/pull/247`,
+        html_url: `https://github.com/${payload.repo_owner}/${payload.repo_name}/pull/247`,
+        branch: "autopr/fix/login-password-validation",
+        base_branch: "main",
+        labels: ["bug", "autopr", "high-priority"],
+        modified_files: ["auth/login.py", "auth/validators.py", "tests/test_auth.py"],
+        stats: { total_additions: 36, total_deletions: 7, files_changed: 3 },
+        commit: { sha: "a3f9e12b7c4d8f1e2a5b6c7d8e9f0a1b2c3d4e5f", message: "fix: add password validation to prevent NoneType crash", author: "autopr-bot" },
+        simulated: true
+      },
+      review: {
+        verdict: "APPROVED_WITH_SUGGESTIONS",
+        score: 82,
+        summary: "The fix correctly addresses the empty password crash. Input validation has been added before the bcrypt call with proper error responses. A minor security improvement is suggested.",
+        categories: {
+          correctness: { rating: "PASS", score: 92, findings: [{ severity: "info", file: "auth/login.py", message: "Fix correctly guards password.encode() with None/empty checks.", suggestion: null }] },
+          security: { rating: "PASS_WITH_WARNING", score: 74, findings: [{ severity: "warning", file: "auth/login.py", message: "Consider rate limiting login attempts to prevent brute force.", suggestion: "Add flask-limiter: @limiter.limit('10/minute') on the login route." }] },
+          code_quality: { rating: "PASS", score: 85, findings: [{ severity: "suggestion", file: "auth/validators.py", message: "validate_password() is clean and reusable — good separation of concerns.", suggestion: null }] },
+          test_coverage: { rating: "PASS", score: 88, findings: [{ severity: "suggestion", file: "tests/test_auth.py", message: "Missing test for password > 128 characters.", suggestion: "Add test_login_password_too_long to cover the max length limit." }] },
+          performance: { rating: "PASS", score: 95, findings: [{ severity: "info", file: "auth/login.py", message: "Validation runs before DB query — optimal ordering.", suggestion: null }] }
+        },
+        inline_comments: [
+          { file: "auth/login.py", line: 14, type: "suggestion", body: "Consider using password.strip() to reject whitespace-only passwords." },
+          { file: "auth/login.py", line: 22, type: "praise", body: "Fixing 404→401 for missing users prevents username enumeration. Excellent catch!" },
+          { file: "auth/validators.py", line: 8, type: "praise", body: "Clean, focused validator. Excellent separation of concerns." },
+          { file: "tests/test_auth.py", line: 15, type: "nitpick", body: "Add assert on the error message text for better test expressiveness." }
+        ],
+        summary_stats: { total_findings: 8, critical: 0, errors: 0, warnings: 1, suggestions: 3, info: 4 },
+        recommendation: "MERGE_AFTER_ADDRESSING_WARNINGS",
+        reviewer: "AutoPR Review Bot v1.0"
+      }
+    }
+  };
+}
+
+// Auto-load demo on start
+loadDemo();
+</script>
+</body>
+</html>
